@@ -35,9 +35,21 @@ def get_image_type(image_path):
 def extract_frames(video_path, num_frames):
     video = cv2.VideoCapture(video_path)
     try:
-        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-        count = min(num_frames, total_frames)
+        reported_count = video.get(cv2.CAP_PROP_FRAME_COUNT)
+        total_frames = int(reported_count) if np.isfinite(reported_count) else 0
         frames = []
+        if total_frames <= 0:
+            # Some backends cannot report a frame count or seek reliably.
+            # Decode only the requested number of frames, stopping when a read fails.
+            for _ in range(num_frames):
+                ret, frame = video.read()
+                if not ret:
+                    break
+                _, buffer = cv2.imencode('.jpg', frame)
+                frames.append(base64.b64encode(buffer).decode('utf-8'))
+            return frames
+
+        count = min(num_frames, total_frames)
         for index in np.linspace(0, total_frames - 1, count, dtype=int):
             video.set(cv2.CAP_PROP_POS_FRAMES, int(index))
             ret, frame = video.read()
